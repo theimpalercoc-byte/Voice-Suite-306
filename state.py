@@ -4,25 +4,29 @@ from typing import Dict, Tuple
 
 @dataclass
 class AppState:
-    # --- Video & Camera Settings ---
-    video_source_type: str = "camera"   # "camera" or "file"
+    # Video & Camera
+    video_source_type: str = "camera"
     video_file_path: str = ""
     camera_index: int = 0
-    show_wireframe: bool = True         # 3D tracking wireframe overlay
+    camera_resolution: str = "640x480"
+    show_wireframe: bool = True
     multi_person_mode: bool = False
     active_target_face: int = 0
-    audio_video_delay_ms: int = 45
+    audio_video_delay_ms: int = 50
 
-    # --- Audio Settings ---
+    # Audio & Voice Suite
     audio_source_type: str = "mic"
     audio_file_path: str = ""
+    audio_input_device: int = 0
+    audio_output_device: int = 0
     is_audio_running: bool = False
     pitch_semitones: int = 0
     reverb_intensity: int = 0
-    noise_gate_threshold: int = 30
-    selected_voice_model: str = ""
+    echo_delay: int = 0
+    noise_gate_threshold: int = 20
+    selected_voice_model: str = "None (DSP Passthrough)"
 
-    # --- Rigging Landmarks ---
+    # Rigging Anchors
     calibration_pins: Dict[str, Tuple[float, float]] = field(default_factory=lambda: {
         "Left Eye": (180.0, 200.0),
         "Right Eye": (320.0, 200.0),
@@ -33,9 +37,9 @@ class AppState:
 
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def set_video_source(self, source_type: str, path: str = "", cam_idx: int = 0):
+    def set_video_source(self, src: str, path: str = "", cam_idx: int = 0):
         with self._lock:
-            self.video_source_type = source_type
+            self.video_source_type = src
             self.video_file_path = path
             self.camera_index = cam_idx
 
@@ -43,26 +47,25 @@ class AppState:
         with self._lock:
             self.camera_index = idx
 
-    def toggle_wireframe(self, enabled: bool):
+    def toggle_wireframe(self, val: bool):
         with self._lock:
-            self.show_wireframe = enabled
+            self.show_wireframe = val
 
-    def set_audio_source(self, source_type: str, path: str = ""):
+    def toggle_multi_person(self, val: bool):
         with self._lock:
-            self.audio_source_type = source_type
+            self.multi_person_mode = val
+
+    def set_audio_source(self, src: str, path: str = ""):
+        with self._lock:
+            self.audio_source_type = src
             self.audio_file_path = path
 
-    def toggle_multi_person(self, enabled: bool):
+    def update_fx(self, pitch: int, reverb: int, echo: int, gate: int):
         with self._lock:
-            self.multi_person_mode = enabled
-
-    def update_pitch(self, val: int):
-        with self._lock:
-            self.pitch_semitones = val
-
-    def get_pitch(self) -> int:
-        with self._lock:
-            return self.pitch_semitones
+            self.pitch_semitones = pitch
+            self.reverb_intensity = reverb
+            self.echo_delay = echo
+            self.noise_gate_threshold = gate
 
     def update_pins(self, pin_dict: Dict[str, Tuple[float, float]]):
         with self._lock:
