@@ -8,7 +8,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage, QPixmap
 
 from state import shared_state
-from video_pipeline import VideoPipelineThread
+from video_pipeline import VideoPipelineThread, scan_available_cameras
 from audio_engine import AudioPipelineThread
 from floating_window import FloatingAvatarWindow
 from rigging_canvas import AvatarRiggingWidget
@@ -17,7 +17,7 @@ class StudioMasterWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("AI VOICE & AVATAR STUDIO - DGX / OBS BROADCAST")
-        self.setMinimumSize(1040, 760)
+        self.setMinimumSize(1060, 780)
 
         self.setStyleSheet("""
             QMainWindow { background-color: #121214; }
@@ -27,7 +27,7 @@ class StudioMasterWindow(QMainWindow):
             QTabBar::tab:selected { background: #00B37E; color: white; }
             QGroupBox { font-weight: bold; border: 2px solid #29292E; border-radius: 10px; margin-top: 14px; padding-top: 14px; }
             QGroupBox::title { subcontrol-origin: margin; left: 14px; padding: 0 6px; }
-            QComboBox { background-color: #202024; border: 1px solid #29292E; border-radius: 6px; padding: 6px 12px; min-width: 160px; }
+            QComboBox { background-color: #202024; border: 1px solid #29292E; border-radius: 6px; padding: 6px 12px; min-width: 170px; }
             QPushButton { background-color: #00B37E; color: white; font-weight: bold; border: none; border-radius: 8px; padding: 10px 16px; }
             QPushButton:hover { background-color: #00875F; }
             QSlider::groove:horizontal { border: 1px solid #29292E; height: 6px; background: #202024; border-radius: 3px; }
@@ -36,22 +36,18 @@ class StudioMasterWindow(QMainWindow):
             QProgressBar::chunk { background-color: #00B37E; border-radius: 4px; }
         """)
 
-        # Tab Widget container
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
-        # Tab 1: Live Studio
         self.studio_tab = QWidget()
         self._build_studio_tab()
         self.tabs.addTab(self.studio_tab, "🎙️ Live Studio & OBS Broadcast")
 
-        # Tab 2: Avatar Rigging Canvas
         self.rigging_widget = AvatarRiggingWidget()
         self.tabs.addTab(self.rigging_widget, "🎯 Avatar Rigging Canvas")
 
         self.floating_window = FloatingAvatarWindow()
 
-        # Background Threads
         self.video_thread = VideoPipelineThread()
         self.video_thread.raw_frame_ready.connect(self.on_raw_frame)
         self.video_thread.processed_frame_ready.connect(self.on_processed_frame)
@@ -67,9 +63,8 @@ class StudioMasterWindow(QMainWindow):
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
 
-        # Viewfinders
         view_layout = QHBoxLayout()
-        in_box = QGroupBox("📷 CAM INPUT (Private Streamer View)")
+        in_box = QGroupBox("📷 CAM INPUT & 3D TRACKING (Private View)")
         in_l = QVBoxLayout(in_box)
         self.input_monitor = QLabel("Initializing Camera...")
         self.input_monitor.setFixedSize(440, 330)
@@ -88,23 +83,34 @@ class StudioMasterWindow(QMainWindow):
         view_layout.addWidget(out_box)
         layout.addLayout(view_layout)
 
-        # Controls
         ctrl_layout = QHBoxLayout()
-        v_box = QGroupBox("Video & Tracking Controls")
+        v_box = QGroupBox("Camera & 3D Motion Controls")
         v_l = QVBoxLayout(v_box)
+
+        # Video Source selection
         v_row = QHBoxLayout()
-        v_row.addWidget(QLabel("Source:"))
+        v_row.addWidget(QLabel("Source / Camera:"))
         self.v_combo = QComboBox()
-        self.v_combo.addItems(["Test Video File (test_vid.mp4)", "Live Webcam (Device 0)"])
-        self.v_combo.currentIndexChanged.connect(lambda idx: shared_state.set_video_source("file", "test_vid.mp4") if idx == 0 else shared_state.set_video_source("camera"))
-        v_row.addWidget(self.v_combo)
+        self.rescan_btn = QPushButton("🔄 Rescan")
+        self.rescan_btn.setStyleSheet("padding: 6px 10px;")
+        self.rescan_btn.clicked.connect(self.populate_camera_list)
+        v_row.addWidget(self.v_combo, 3)
+        v_row.addWidget(self.rescan_btn, 1)
         v_l.addLayout(v_row)
 
-        self.mp_cb = QCheckBox("👥 Enable Multi-Person Tracking")
-        self.mp_cb.toggled.connect(shared_state.toggle_multi_person)
-        v_l.addWidget(self.mp_cb)
+        # 3D Wireframe and Multi-Person checkboxes
+        cb_row = QHBoxLayout()
+        self.wf_cb = QCheckBox("📐 Show 3D Tracking Wireframe")
+        self.wf_cb.setChecked(True)
+        self.wf_cb.toggled.connect(shared_state.toggle_wireframe)
+        cb_row.addWidget(self.wf_cb)
 
-        self.status_lbl = QLabel("Detected Faces: 0 | Focus: Primary Target")
+        self.mp_cb = QCheckBox("👥 Multi-Person")
+        self.mp_cb.toggled.connect(shared_state.toggle_multi_person)
+        cb_row.addWidget(self.mp_cb)
+        v_l.addLayout(cb_row)
+
+        self.status_lbl = QLabel("Detected Faces: 0 | 3D Rig: Active")
         self.status_lbl.setStyleSheet("color: #00B37E; font-weight: bold;")
         v_l.addWidget(self.status_lbl)
 
@@ -116,7 +122,7 @@ class StudioMasterWindow(QMainWindow):
         a_box = QGroupBox("Voice Lab & Audio Controls")
         a_l = QVBoxLayout(a_box)
         a_row = QHBoxLayout()
-        a_row.addWidget(QLabel("Source:"))
+        a_row.addWidget(QLabel("Audio Source:"))
         self.a_combo = QComboBox()
         self.a_combo.addItems(["Test Audio File (test_audio.wav)", "Live Microphone"])
         self.a_combo.currentIndexChanged.connect(lambda idx: shared_state.set_audio_source("file", "test_audio.wav") if idx == 0 else shared_state.set_audio_source("mic"))
@@ -138,6 +144,26 @@ class StudioMasterWindow(QMainWindow):
         ctrl_layout.addWidget(a_box, 1)
         layout.addLayout(ctrl_layout)
 
+        self.populate_camera_list()
+        self.v_combo.currentIndexChanged.connect(self.on_video_selection_changed)
+
+    def populate_camera_list(self):
+        self.v_combo.blockSignals(True)
+        self.v_combo.clear()
+        self.v_combo.addItem("🎬 Test Video File (test_vid.mp4)", ("file", "test_vid.mp4", 0))
+        
+        cams = scan_available_cameras()
+        for c in cams:
+            self.v_combo.addItem(f"📷 Camera Device #{c} (Webcam / NVIDIA / OBS)", ("camera", "", c))
+
+        self.v_combo.blockSignals(False)
+
+    def on_video_selection_changed(self, idx):
+        data = self.v_combo.currentData()
+        if data:
+            src_type, path, cam_idx = data
+            shared_state.set_video_source(src_type, path, cam_idx)
+
     def on_raw_frame(self, frame):
         self.input_monitor.setPixmap(self._cv_to_pixmap(frame, 440, 330))
 
@@ -156,8 +182,7 @@ class StudioMasterWindow(QMainWindow):
         shared_state.update_pitch(val)
 
     def on_face_count_update(self, c):
-        mode = "Multi-Person Tracking" if shared_state.multi_person_mode else "Single-Person Focus"
-        self.status_lbl.setText(f"Detected Faces: {c} | Mode: {mode}")
+        self.status_lbl.setText(f"Detected Faces: {c} | 3D Rig: Active")
 
     def on_audio_level_update(self, lvl):
         self.vu.setValue(min(100, int((lvl / 1200.0) * 100)))
@@ -177,8 +202,6 @@ class StudioMasterWindow(QMainWindow):
         e.accept()
 
 if __name__ == "__main__":
-    shared_state.set_video_source("file", "test_vid.mp4")
-    shared_state.set_audio_source("file", "test_audio.wav")
     app = QApplication(sys.argv)
     window = StudioMasterWindow()
     window.show()

@@ -4,17 +4,17 @@ from typing import Dict, Tuple
 
 @dataclass
 class AppState:
-    # --- Video Pipeline Settings ---
+    # --- Video & Camera Settings ---
     video_source_type: str = "camera"   # "camera" or "file"
     video_file_path: str = ""
-    multi_person_mode: bool = False     # Single-Person vs Multi-Person
-    active_target_face: int = 0
-    is_camera_running: bool = False
     camera_index: int = 0
+    show_wireframe: bool = True         # 3D tracking wireframe overlay
+    multi_person_mode: bool = False
+    active_target_face: int = 0
     audio_video_delay_ms: int = 45
 
-    # --- Audio Pipeline Settings ---
-    audio_source_type: str = "mic"      # "mic" or "file"
+    # --- Audio Settings ---
+    audio_source_type: str = "mic"
     audio_file_path: str = ""
     is_audio_running: bool = False
     pitch_semitones: int = 0
@@ -31,13 +31,21 @@ class AppState:
         "Mouth Right": (310.0, 360.0),
     })
 
-    # Thread Safety
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def set_video_source(self, source_type: str, path: str = ""):
+    def set_video_source(self, source_type: str, path: str = "", cam_idx: int = 0):
         with self._lock:
             self.video_source_type = source_type
             self.video_file_path = path
+            self.camera_index = cam_idx
+
+    def set_camera_index(self, idx: int):
+        with self._lock:
+            self.camera_index = idx
+
+    def toggle_wireframe(self, enabled: bool):
+        with self._lock:
+            self.show_wireframe = enabled
 
     def set_audio_source(self, source_type: str, path: str = ""):
         with self._lock:
