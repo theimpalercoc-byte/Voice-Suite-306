@@ -5,5 +5,3 @@ weights/*
 !weights/.gitkeep
 voices/*
 !voices/.gitkeep
-avatars/*
-!avatars/.gitkeep
