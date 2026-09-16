@@ -39,15 +39,11 @@ jobs:
         # 1. Create a self-signed Code Signing Certificate
         $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=VoiceSuite306, O=theimpalercoc-byte" -CertStoreLocation "Cert:\CurrentUser\My" -NotAfter (Get-Date).AddYears(5)
         
-        # 2. Export public certificate
+        # 2. Export public certificate (.cer)
         Export-Certificate -Cert $cert -FilePath "dist\VoiceSuite306\VoiceSuite306.cer"
 
-        # 3. Locate SignTool from Windows SDK
-        $signtool = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Filter signtool.exe -Recurse | Select-Object -First 1).FullName
-        if ($signtool) {
-            Write-Host "Signing binary with: $signtool"
-            & $signtool sign /fd SHA256 /a /s "My" "dist\VoiceSuite306\VoiceSuite306.exe"
-        }
+        # 3. Sign the executable natively using PowerShell
+        Set-AuthenticodeSignature -FilePath "dist\VoiceSuite306\VoiceSuite306.exe" -Certificate $cert -HashAlgorithm SHA256
 
         # 4. Create 1-click Windows Trust script to bypass SmartScreen
         $trustScript = @"
